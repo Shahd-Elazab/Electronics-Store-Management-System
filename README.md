@@ -13,8 +13,6 @@ The project simulates a real-world electronics store environment, allowing effic
 
 ---
 
-## Features
-
 # ✨ Key Features
 
 ## 🛍️ Customer Features
@@ -100,7 +98,7 @@ The system provides:
 
 ---
 
-The project follows a **Layered Enterprise Architecture**.
+# The project follows a **Layered Enterprise Architecture**.
 
 ```text
 ┌──────────────────────────────┐
@@ -130,15 +128,18 @@ The project follows a **Layered Enterprise Architecture**.
 └──────────────────────────────┘
 ```
 
-## Project Structure
+# Project Structure
 ```bash
 
-├── Product Classes
-├── Inventory System
-├── Cart System
-├── Order Management
-├── GUI (Slint)
-├── Console Interface
-├── CSV Database Files
-├── Exception Handling
-└── Main Application
+├── gui/
+│   └── appwindow.slint      # Slint UI design layout specification
+├── CMakeLists.txt           # Build configuration linking both executable targets
+├── Store.h                  # Master header: polymorphic schemas & class declarations
+├── Store.cpp                # Core implementation: Inventory, Cart, Order, & userManager
+├── GuiController.h          # GUI bridge controller header
+├── GuiController.cpp        # GUI event routing & state synchronization
+├── main.cpp                 # Execution entry point for the CONSOLE application
+├── main_gui.cpp             # Execution entry point for the SLINT GUI application
+├── users.csv                # Persistent security database (encrypted password hashes)
+├── Warehouse.csv            # Positional subschema tracking database for products
+└── Orders.csv               # Transaction history & immutable receipt database
