@@ -97,7 +97,7 @@ The system provides:
 
 ---
 
-# The project follows a **Layered Enterprise Architecture**.
+# 🛠️ The project follows a **Layered Enterprise Architecture**.
 
 ```text
 ┌──────────────────────────────┐
