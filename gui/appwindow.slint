@@ -1,0 +1,728 @@
+import { Button, LineEdit, ScrollView, VerticalBox, HorizontalBox, GridBox } from "std-widgets.slint";
+
+// ─── Data Structures ────────────────────────────────────────────────────────
+
+struct ProductItem {
+    id: string,
+    name: string,
+    brand: string,
+    type: string,
+    price: string,
+    stock: string,
+    status: string,
+    on-sale: bool,
+}
+
+struct UiCartItem {
+    product-id: string,
+    name: string,
+    price: string,
+    quantity: string,
+    subtotal: string,
+}
+
+struct OrderItem {
+    order-id: string,
+    date: string,
+    total: string,
+}
+
+// ─── Reusable components ─────────────────────────────────────────────────────
+
+component NavButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked;
+    height: 42px;
+    background: active ? #00adb5 : transparent;
+    border-radius: 8px;
+    animate background { duration: 150ms; }
+    touch := TouchArea { clicked => { root.clicked(); } }
+    Text {
+        text: label;
+        color: active ? #1a1a2e : #aaaaaa;
+        font-size: 13px;
+        font-weight: active ? 700 : 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <brush> bg: #00adb5;
+    in property <brush> fg: #1a1a2e;
+    callback clicked;
+    height: 36px;
+    background: bg;
+    border-radius: 6px;
+    animate background { duration: 120ms; }
+    touch := TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
+    Text {
+        text: label;
+        color: fg;
+        font-size: 12px;
+        font-weight: 700;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}
+
+component InputField inherits VerticalBox {
+    in property <string> label;
+    in property <string> placeholder;
+    in property <bool> is-password: false;
+    out property <string> value <=> edit.text;
+    spacing: 5px;
+    Text { text: label; color: #888888; font-size: 11px; }
+    edit := LineEdit {
+        placeholder-text: placeholder;
+        input-type: is-password ? InputType.password : InputType.text;
+        height: 40px;
+    }
+}
+
+// ─── Product Card ─────────────────────────────────────────────────────────────
+
+component ProductCard inherits Rectangle {
+    in property <string> prod-id;
+    in property <string> prod-name;
+    in property <string> prod-brand;
+    in property <string> prod-type;
+    in property <string> prod-price;
+    in property <string> prod-stock;
+    in property <string> prod-status;
+    in property <bool>   prod-on-sale;
+    in property <string> user-role;
+
+    callback add-to-cart(string);
+    callback delete-product(string);
+    // restock now passes id + qty string
+    callback restock-product-qty(string, string);
+    callback discontinue-product(string);
+
+    background: #16213e;
+    border-radius: 10px;
+    // taller card for admin to fit qty input
+    height: user-role == "Admin" ? 195px : 160px;
+
+    VerticalBox {
+        padding: 14px;
+        spacing: 6px;
+
+        // Type badge + sale tag
+        HorizontalBox {
+            spacing: 8px;
+            Text {
+                text: prod-type;
+                color: prod-type == "Smartphone" ? #00adb5
+                     : prod-type == "Laptop"     ? #f5a623
+                     :                             #a78bfa;
+                font-size: 10px;
+                font-weight: 700;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if prod-on-sale : Text {
+                text: "SALE";
+                color: #ff6b6b;
+                font-size: 10px;
+                font-weight: 700;
+            }
+        }
+
+        Text { text: prod-name;  color: #eeeeee; font-size: 14px; font-weight: 700; overflow: elide; }
+        Text { text: prod-brand; color: #888888; font-size: 11px; }
+
+        HorizontalBox {
+            spacing: 12px;
+            Text { text: "$" + prod-price; color: #00adb5; font-size: 14px; font-weight: 700; }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: prod-stock + " in stock";
+                color: prod-stock == "0" ? #ff6b6b : #888888;
+                font-size: 11px;
+            }
+        }
+
+        // ── Customer buttons ──────────────────────────────────────────────
+        if user-role == "Customer" : ActionButton {
+            label: "+ Cart";
+            bg: #00adb5;
+            fg: #1a1a2e;
+            clicked => { add-to-cart(prod-id); }
+        }
+
+        // ── Admin controls ────────────────────────────────────────────────
+        if user-role == "Admin" : VerticalBox {
+            spacing: 4px;
+
+            // Qty input for restock
+            restock-qty := LineEdit {
+                placeholder-text: "Restock qty...";
+                height: 30px;
+                font-size: 11px;
+            }
+
+            HorizontalBox {
+                spacing: 5px;
+                ActionButton {
+                    label: "Restock";
+                    bg: #1e3a5f;
+                    fg: #00adb5;
+                    horizontal-stretch: 1;
+                    clicked => { restock-product-qty(prod-id, restock-qty.text); }
+                }
+                ActionButton {
+                    label: "Discontinue";
+                    bg: #3a1e1e;
+                    fg: #ff6b6b;
+                    horizontal-stretch: 1;
+                    clicked => { discontinue-product(prod-id); }
+                }
+                ActionButton {
+                    label: "Delete";
+                    bg: #ff6b6b;
+                    fg: white;
+                    horizontal-stretch: 1;
+                    clicked => { delete-product(prod-id); }
+                }
+            }
+        }
+    }
+}
+
+// ─── Main Window ─────────────────────────────────────────────────────────────
+
+export component AppWindow inherits Window {
+    title: "Electronics Store";
+    min-width: 1100px;
+    min-height: 700px;
+    background: #0f0f1a;
+
+    // ── Properties ───────────────────────────────────────────────────────────
+    in property <string> user-name: "Guest";
+    in property <string> user-role: "None";
+    in property <string> status-message: "";
+    in property <string> cart-total: "0.00";
+    in property <string> active-page: "catalog";
+
+    in property <[ProductItem]> catalog-items: [];
+    in property <[UiCartItem]>  cart-items: [];
+    in property <[OrderItem]>   order-items: [];
+
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+    callback login-requested(string, string);
+    callback signup-requested(string, string, string, string, string);
+    callback logout-requested();
+    callback add-to-cart(string, int);
+    callback remove-from-cart(string);
+    callback checkout-requested();
+    callback delete-product(string);
+    callback restock-product-qty(string, string);   // id, qty-as-string
+    callback discontinue-product(string);
+    callback add-product-requested(string, string, string, string, string, string, string);
+    callback apply-discount-requested(string, float, string);
+    callback navigate(string);
+    callback search-requested(string);
+
+    // ── Local state ───────────────────────────────────────────────────────────
+    property <bool> show-signup: false;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // LOGIN / SIGNUP SCREEN
+    // ═════════════════════════════════════════════════════════════════════════
+    if (user-role == "None") : Rectangle {
+        background: #0f0f1a;
+
+        HorizontalBox {
+            Rectangle {
+                width: 420px;
+                background: #1a1a2e;
+                VerticalBox {
+                    alignment: center;
+                    padding: 60px;
+                    spacing: 20px;
+                    Text { text: "Electronics Store"; color: #00adb5; font-size: 30px; font-weight: 900; horizontal-alignment: center; }
+                    Text { text: "Management System"; color: #888888; font-size: 14px; horizontal-alignment: center; }
+                    Rectangle { height: 40px; }
+                    Text {
+                        text: "📦  Full Inventory Control\n🛒  Customer Shopping\n📊  Sales Reports\n🔐  Secure Login";
+                        color: #eeeeee;
+                        font-size: 14px;
+                        horizontal-alignment: left;
+                    }
+                }
+            }
+
+            Rectangle {
+                background: #0f0f1a;
+                horizontal-stretch: 1;
+                VerticalBox {
+                    alignment: center;
+                    padding: 60px;
+                    spacing: 16px;
+
+                    // Tab switcher
+                    HorizontalBox {
+                        spacing: 0px;
+                        Rectangle {
+                            horizontal-stretch: 1; height: 44px;
+                            background: !show-signup ? #00adb5 : #1a1a2e;
+                            border-radius: 8px;
+                            animate background { duration: 150ms; }
+                            touch1 := TouchArea { clicked => { show-signup = false; } mouse-cursor: pointer; }
+                            Text { text: "Login"; color: !show-signup ? #1a1a2e : #888888; font-weight: 700; font-size: 14px; vertical-alignment: center; horizontal-alignment: center; }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1; height: 44px;
+                            background: show-signup ? #00adb5 : #1a1a2e;
+                            border-radius: 8px;
+                            animate background { duration: 150ms; }
+                            touch2 := TouchArea { clicked => { show-signup = true; } mouse-cursor: pointer; }
+                            Text { text: "Sign Up"; color: show-signup ? #1a1a2e : #888888; font-weight: 700; font-size: 14px; vertical-alignment: center; horizontal-alignment: center; }
+                        }
+                    }
+
+                    // Login form
+                    if !show-signup : VerticalBox {
+                        spacing: 14px;
+                        login-id   := InputField { label: "USER ID";   placeholder: "Enter your numeric ID"; }
+                        login-pass := InputField { label: "PASSWORD";  placeholder: "Enter your password"; is-password: true; }
+                        if status-message != "" : Text {
+                            text: status-message;
+                            color: #ff6b6b;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                        }
+                        ActionButton {
+                            label: "LOGIN"; bg: #00adb5; fg: #1a1a2e; height: 46px;
+                            clicked => { root.login-requested(login-id.value, login-pass.value); }
+                        }
+                    }
+
+                    // Sign Up form
+                    if show-signup : VerticalBox {
+                        spacing: 10px;
+                        signup-name  := InputField { label: "FULL NAME";    placeholder: "Your full name"; }
+                        signup-email := InputField { label: "EMAIL";        placeholder: "your@email.com"; }
+                        signup-pass  := InputField { label: "PASSWORD";     placeholder: "Choose a password"; is-password: true; }
+                        signup-phone := InputField { label: "PHONE NUMBER"; placeholder: "e.g. 01012345678"; }
+                        signup-addr  := InputField { label: "ADDRESS";      placeholder: "Your address"; }
+                        if status-message != "" : Text {
+                            text: status-message;
+                            color: #00adb5;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                        }
+                        ActionButton {
+                            label: "CREATE ACCOUNT"; bg: #00adb5; fg: #1a1a2e; height: 46px;
+                            clicked => {
+                                root.signup-requested(
+                                    signup-name.value, signup-email.value,
+                                    signup-pass.value, signup-phone.value, signup-addr.value
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // MAIN APP SCREEN
+    // ═════════════════════════════════════════════════════════════════════════
+    if (user-role != "None") : HorizontalBox {
+        spacing: 0px;
+
+        // ── Sidebar ───────────────────────────────────────────────────────
+        Rectangle {
+            width: 220px;
+            background: #1a1a2e;
+            VerticalBox {
+                padding: 20px;
+                spacing: 8px;
+
+                Text { text: "Electronics Store"; color: #00adb5; font-size: 18px; font-weight: 900; horizontal-alignment: center; }
+                Rectangle { height: 1px; background: #2a2a4e; }
+
+                Rectangle {
+                    background: #16213e; border-radius: 8px; height: 64px;
+                    VerticalBox {
+                        padding: 10px; spacing: 2px;
+                        Text { text: user-name; color: #eeeeee; font-size: 13px; font-weight: 700; overflow: elide; }
+                        Text { text: user-role; color: #00adb5; font-size: 11px; }
+                    }
+                }
+
+                Rectangle { height: 8px; }
+                Text { text: "MENU"; color: #555555; font-size: 10px; font-weight: 700; }
+
+                NavButton { label: "🏪  Catalog";     active: active-page == "catalog";    clicked => { root.navigate("catalog"); } }
+
+                if user-role == "Customer" : NavButton { label: "🛒  My Cart";    active: active-page == "cart";      clicked => { root.navigate("cart"); } }
+                if user-role == "Customer" : NavButton { label: "📋  My Orders";  active: active-page == "orders";    clicked => { root.navigate("orders"); } }
+                if user-role == "Admin"    : NavButton { label: "➕  Add Product"; active: active-page == "admin-add"; clicked => { root.navigate("admin-add"); } }
+                if user-role == "Admin"    : NavButton { label: "📊  Inventory";  active: active-page == "catalog";   clicked => { root.navigate("catalog"); } }
+
+                Rectangle { vertical-stretch: 1; }
+
+                if status-message != "" : Rectangle {
+                    background: #0d2137; border-radius: 6px; height: 36px;
+                    Text { text: status-message; color: #00adb5; font-size: 11px; vertical-alignment: center; horizontal-alignment: center; overflow: elide; }
+                }
+
+                ActionButton { label: "Logout"; bg: #2a1a1a; fg: #ff6b6b; clicked => { root.logout-requested(); } }
+            }
+        }
+
+        // ── Content area ──────────────────────────────────────────────────
+        Rectangle {
+            background: #0f0f1a;
+            horizontal-stretch: 1;
+
+            // ── CATALOG ───────────────────────────────────────────────────
+            if active-page == "catalog" : VerticalBox {
+                padding: 24px;
+                spacing: 16px;
+
+                HorizontalBox {
+                    spacing: 12px;
+                    Text {
+                        text: user-role == "Admin" ? "Inventory Management" : "Product Catalog";
+                        color: #eeeeee; font-size: 22px; font-weight: 700; vertical-alignment: center;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    search-field := LineEdit {
+                        placeholder-text: "Search products...";
+                        width: 240px; height: 38px;
+                        edited => { root.search-requested(self.text); }
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalBox {
+                        spacing: 12px;
+
+                        // Row 1
+                        HorizontalBox {
+                            spacing: 12px;
+                            if catalog-items.length > 0 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[0].id; prod-name: catalog-items[0].name;
+                                prod-brand: catalog-items[0].brand; prod-type: catalog-items[0].type;
+                                prod-price: catalog-items[0].price; prod-stock: catalog-items[0].stock;
+                                prod-status: catalog-items[0].status; prod-on-sale: catalog-items[0].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 1 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[1].id; prod-name: catalog-items[1].name;
+                                prod-brand: catalog-items[1].brand; prod-type: catalog-items[1].type;
+                                prod-price: catalog-items[1].price; prod-stock: catalog-items[1].stock;
+                                prod-status: catalog-items[1].status; prod-on-sale: catalog-items[1].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 2 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[2].id; prod-name: catalog-items[2].name;
+                                prod-brand: catalog-items[2].brand; prod-type: catalog-items[2].type;
+                                prod-price: catalog-items[2].price; prod-stock: catalog-items[2].stock;
+                                prod-status: catalog-items[2].status; prod-on-sale: catalog-items[2].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                        }
+                        // Row 2
+                        HorizontalBox {
+                            spacing: 12px;
+                            if catalog-items.length > 3 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[3].id; prod-name: catalog-items[3].name;
+                                prod-brand: catalog-items[3].brand; prod-type: catalog-items[3].type;
+                                prod-price: catalog-items[3].price; prod-stock: catalog-items[3].stock;
+                                prod-status: catalog-items[3].status; prod-on-sale: catalog-items[3].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 4 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[4].id; prod-name: catalog-items[4].name;
+                                prod-brand: catalog-items[4].brand; prod-type: catalog-items[4].type;
+                                prod-price: catalog-items[4].price; prod-stock: catalog-items[4].stock;
+                                prod-status: catalog-items[4].status; prod-on-sale: catalog-items[4].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 5 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[5].id; prod-name: catalog-items[5].name;
+                                prod-brand: catalog-items[5].brand; prod-type: catalog-items[5].type;
+                                prod-price: catalog-items[5].price; prod-stock: catalog-items[5].stock;
+                                prod-status: catalog-items[5].status; prod-on-sale: catalog-items[5].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                        }
+                        // Row 3
+                        HorizontalBox {
+                            spacing: 12px;
+                            if catalog-items.length > 6 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[6].id; prod-name: catalog-items[6].name;
+                                prod-brand: catalog-items[6].brand; prod-type: catalog-items[6].type;
+                                prod-price: catalog-items[6].price; prod-stock: catalog-items[6].stock;
+                                prod-status: catalog-items[6].status; prod-on-sale: catalog-items[6].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 7 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[7].id; prod-name: catalog-items[7].name;
+                                prod-brand: catalog-items[7].brand; prod-type: catalog-items[7].type;
+                                prod-price: catalog-items[7].price; prod-stock: catalog-items[7].stock;
+                                prod-status: catalog-items[7].status; prod-on-sale: catalog-items[7].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                            if catalog-items.length > 8 : ProductCard {
+                                horizontal-stretch: 1;
+                                prod-id: catalog-items[8].id; prod-name: catalog-items[8].name;
+                                prod-brand: catalog-items[8].brand; prod-type: catalog-items[8].type;
+                                prod-price: catalog-items[8].price; prod-stock: catalog-items[8].stock;
+                                prod-status: catalog-items[8].status; prod-on-sale: catalog-items[8].on-sale;
+                                user-role: user-role;
+                                add-to-cart(id)              => { root.add-to-cart(id, 1); }
+                                delete-product(id)           => { root.delete-product(id); }
+                                restock-product-qty(id, qty) => { root.restock-product-qty(id, qty); }
+                                discontinue-product(id)      => { root.discontinue-product(id); }
+                            }
+                        }
+
+                        if catalog-items.length == 0 : Rectangle {
+                            height: 200px;
+                            Text { text: "No products found."; color: #555555; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+
+            // ── CART ──────────────────────────────────────────────────────
+            if active-page == "cart" : VerticalBox {
+                padding: 24px;
+                spacing: 16px;
+
+                Text { text: "My Cart"; color: #eeeeee; font-size: 22px; font-weight: 700; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalBox {
+                        spacing: 8px;
+
+                        Rectangle {
+                            background: #1a1a2e; border-radius: 8px; height: 36px;
+                            HorizontalBox {
+                                padding: 10px;
+                                Text { text: "Product";  color: #888888; font-size: 11px; font-weight: 700; horizontal-stretch: 1; }
+                                Text { text: "Price";    color: #888888; font-size: 11px; font-weight: 700; width: 100px; }
+                                Text { text: "Qty";      color: #888888; font-size: 11px; font-weight: 700; width: 60px; }
+                                Text { text: "Subtotal"; color: #888888; font-size: 11px; font-weight: 700; width: 100px; }
+                                Text { text: "";         width: 80px; }
+                            }
+                        }
+
+                        if cart-items.length > 0 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: cart-items[0].name;     color: #eeeeee; font-size: 13px; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: "$"+cart-items[0].price;    color: #aaaaaa; font-size: 13px; width: 100px; }
+                                Text { text: cart-items[0].quantity; color: #aaaaaa; font-size: 13px; width: 60px; }
+                                Text { text: "$"+cart-items[0].subtotal; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                ActionButton { label: "Remove"; bg: #3a1a1a; fg: #ff6b6b; width: 80px; clicked => { root.remove-from-cart(cart-items[0].product-id); } }
+                            }
+                        }
+                        if cart-items.length > 1 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: cart-items[1].name;     color: #eeeeee; font-size: 13px; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: "$"+cart-items[1].price;    color: #aaaaaa; font-size: 13px; width: 100px; }
+                                Text { text: cart-items[1].quantity; color: #aaaaaa; font-size: 13px; width: 60px; }
+                                Text { text: "$"+cart-items[1].subtotal; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                ActionButton { label: "Remove"; bg: #3a1a1a; fg: #ff6b6b; width: 80px; clicked => { root.remove-from-cart(cart-items[1].product-id); } }
+                            }
+                        }
+                        if cart-items.length > 2 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: cart-items[2].name;     color: #eeeeee; font-size: 13px; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: "$"+cart-items[2].price;    color: #aaaaaa; font-size: 13px; width: 100px; }
+                                Text { text: cart-items[2].quantity; color: #aaaaaa; font-size: 13px; width: 60px; }
+                                Text { text: "$"+cart-items[2].subtotal; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                ActionButton { label: "Remove"; bg: #3a1a1a; fg: #ff6b6b; width: 80px; clicked => { root.remove-from-cart(cart-items[2].product-id); } }
+                            }
+                        }
+                        if cart-items.length > 3 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: cart-items[3].name;     color: #eeeeee; font-size: 13px; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: "$"+cart-items[3].price;    color: #aaaaaa; font-size: 13px; width: 100px; }
+                                Text { text: cart-items[3].quantity; color: #aaaaaa; font-size: 13px; width: 60px; }
+                                Text { text: "$"+cart-items[3].subtotal; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                ActionButton { label: "Remove"; bg: #3a1a1a; fg: #ff6b6b; width: 80px; clicked => { root.remove-from-cart(cart-items[3].product-id); } }
+                            }
+                        }
+                        if cart-items.length > 4 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: cart-items[4].name;     color: #eeeeee; font-size: 13px; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: "$"+cart-items[4].price;    color: #aaaaaa; font-size: 13px; width: 100px; }
+                                Text { text: cart-items[4].quantity; color: #aaaaaa; font-size: 13px; width: 60px; }
+                                Text { text: "$"+cart-items[4].subtotal; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                ActionButton { label: "Remove"; bg: #3a1a1a; fg: #ff6b6b; width: 80px; clicked => { root.remove-from-cart(cart-items[4].product-id); } }
+                            }
+                        }
+
+                        if cart-items.length == 0 : Rectangle {
+                            height: 120px;
+                            Text { text: "Your cart is empty."; color: #555555; font-size: 15px; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: #1a1a2e; border-radius: 10px; height: 70px;
+                    HorizontalBox {
+                        padding: 16px; spacing: 16px;
+                        Text { text: "Total:"; color: #888888; font-size: 16px; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: "$" + cart-total; color: #00adb5; font-size: 24px; font-weight: 900; vertical-alignment: center; }
+                        ActionButton { label: "CHECKOUT"; bg: #00adb5; fg: #1a1a2e; width: 140px; height: 44px; clicked => { root.checkout-requested(); } }
+                    }
+                }
+            }
+
+            // ── ORDERS ────────────────────────────────────────────────────
+            if active-page == "orders" : VerticalBox {
+                padding: 24px; spacing: 16px;
+                Text { text: "My Order History"; color: #eeeeee; font-size: 22px; font-weight: 700; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalBox {
+                        spacing: 8px;
+                        Rectangle {
+                            background: #1a1a2e; border-radius: 8px; height: 36px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "Order ID"; color: #888888; font-size: 11px; font-weight: 700; width: 100px; }
+                                Text { text: "Date";     color: #888888; font-size: 11px; font-weight: 700; horizontal-stretch: 1; }
+                                Text { text: "Total";    color: #888888; font-size: 11px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length > 0 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "#"+order-items[0].order-id; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                Text { text: order-items[0].date;  color: #aaaaaa; font-size: 13px; horizontal-stretch: 1; }
+                                Text { text: "$"+order-items[0].total; color: #eeeeee; font-size: 13px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length > 1 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "#"+order-items[1].order-id; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                Text { text: order-items[1].date;  color: #aaaaaa; font-size: 13px; horizontal-stretch: 1; }
+                                Text { text: "$"+order-items[1].total; color: #eeeeee; font-size: 13px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length > 2 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "#"+order-items[2].order-id; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                Text { text: order-items[2].date;  color: #aaaaaa; font-size: 13px; horizontal-stretch: 1; }
+                                Text { text: "$"+order-items[2].total; color: #eeeeee; font-size: 13px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length > 3 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "#"+order-items[3].order-id; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                Text { text: order-items[3].date;  color: #aaaaaa; font-size: 13px; horizontal-stretch: 1; }
+                                Text { text: "$"+order-items[3].total; color: #eeeeee; font-size: 13px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length > 4 : Rectangle { background: #16213e; border-radius: 8px; height: 44px;
+                            HorizontalBox { padding: 10px;
+                                Text { text: "#"+order-items[4].order-id; color: #00adb5; font-size: 13px; font-weight: 700; width: 100px; }
+                                Text { text: order-items[4].date;  color: #aaaaaa; font-size: 13px; horizontal-stretch: 1; }
+                                Text { text: "$"+order-items[4].total; color: #eeeeee; font-size: 13px; font-weight: 700; width: 120px; }
+                            }
+                        }
+                        if order-items.length == 0 : Rectangle {
+                            height: 120px;
+                            Text { text: "No orders yet."; color: #555555; font-size: 15px; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+
+            // ── ADD PRODUCT (Admin) ───────────────────────────────────────
+            if active-page == "admin-add" : VerticalBox {
+                padding: 24px; spacing: 16px;
+                Text { text: "Add New Product"; color: #eeeeee; font-size: 22px; font-weight: 700; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalBox {
+                        spacing: 14px;
+                        width: 500px;
+
+                        ap-id    := InputField { label: "PRODUCT ID"; placeholder: "e.g. SP-010"; }
+                        ap-name  := InputField { label: "NAME";       placeholder: "Product name"; }
+                        ap-brand := InputField { label: "BRAND";      placeholder: "Brand name"; }
+                        ap-model := InputField { label: "MODEL";      placeholder: "Model number"; }
+                        ap-price := InputField { label: "PRICE ($)";  placeholder: "e.g. 999.99"; }
+                        ap-stock := InputField { label: "STOCK QTY";  placeholder: "e.g. 50"; }
+
+                        VerticalBox {
+                            spacing: 5px;
+                            Text { text: "TYPE"; color: #888888; font-size: 11px; }
+                            ap-type := LineEdit { placeholder-text: "smartphone / laptop / accessory"; height: 40px; }
+                        }
+
+                        if status-message != "" : Rectangle {
+                            background: #0d2137; border-radius: 6px; height: 36px;
+                            Text { text: status-message; color: #00adb5; font-size: 12px; vertical-alignment: center; horizontal-alignment: center; }
+                        }
+
+                        ActionButton {
+                            label: "ADD PRODUCT"; bg: #00adb5; fg: #1a1a2e; height: 46px;
+                            clicked => {
+                                root.add-product-requested(
+                                    ap-id.value, ap-name.value, ap-brand.value, ap-model.value,
+                                    ap-price.value, ap-stock.value, ap-type.text
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
