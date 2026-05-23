@@ -127,7 +127,7 @@ The system provides:
 └──────────────────────────────┘
 ```
 
-# Project Structure
+# 📂 Project Structure
 ```bash
 
 ├── gui/
