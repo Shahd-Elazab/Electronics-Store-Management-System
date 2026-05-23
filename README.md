@@ -1,6 +1,6 @@
 # Electronics Store Management System
 
-<div align="center">
+<div align="left">
 
 ![C++](https://img.shields.io/badge/C++-20-blue?style=for-the-badge&logo=cplusplus)
 ![OOP](https://img.shields.io/badge/OOP-Architecture-red?style=for-the-badge)
