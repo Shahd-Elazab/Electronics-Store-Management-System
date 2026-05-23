@@ -56,8 +56,7 @@ The project simulates a real-world electronics store environment, allowing effic
 - Controlled authentication
 - Role-based authorization
 - Protected admin access
-## Technologies & Concepts
-
+  
 ---
 # 🏗️ System Architecture
 
