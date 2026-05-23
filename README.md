@@ -75,7 +75,7 @@ The system provides:
 - ⚙️ Runtime polymorphic product handling
 - 📊 STL-based optimized data structures
 - 🏗️ Design-pattern-driven architecture
-- 
+
 ### Languages & Tools
 - C++
 - Slint GUI Toolkit
