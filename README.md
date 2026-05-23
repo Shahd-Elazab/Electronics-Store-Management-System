@@ -58,6 +58,7 @@ The project simulates a real-world electronics store environment, allowing effic
 - Protected admin access
   
 ---
+
 # 🏗️ System Architecture
 
 The system provides:
@@ -97,11 +98,6 @@ The system provides:
 
 ---
 
-### 🖥️ GUI Support
-The project integrates a modern GUI using the **Slint Framework**, connected directly to the C++ backend through `GuiController.cpp`.
-
----
-
 # 🛠️ The project follows a **Layered Enterprise Architecture**.
 
 ```text
@@ -131,6 +127,13 @@ The project integrates a modern GUI using the **Slint Framework**, connected dir
 │  • orders.csv                │
 └──────────────────────────────┘
 ```
+
+---
+
+### 🖥️ GUI Support
+The project integrates a modern GUI using the **Slint Framework**, connected directly to the C++ backend through `GuiController.cpp`.
+
+---
 
 # 📂 Project Structure
 ```bash
