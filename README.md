@@ -130,7 +130,7 @@ The system provides:
 
 ---
 
-### 🖥️ GUI Support
+# 🖥️ GUI Support
 The project integrates a modern GUI using the **Slint Framework**, connected directly to the C++ backend through `GuiController.cpp`.
 
 ---
